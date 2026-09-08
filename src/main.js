@@ -461,11 +461,10 @@ function refresh() {
 // Animation loop
 // ---------------------------------------------------------------------------
 
-let last = performance.now();
+// Each layer decides for itself whether a frame needs drawing: the particle canvas throttles itself
+// to 30 fps; the scene redraws only when the result changed or a sail is fluttering.
 function loop(now) {
-  const dt = now - last;
-  last = now;
-  particles.frame(dt, { tws: state.tws, twd: state.twd }, now);
+  particles.frame({ tws: state.tws, twd: state.twd }, now);
   scene.update(result, state, { ghost: !quiz || checked }, now);
   requestAnimationFrame(loop);
 }

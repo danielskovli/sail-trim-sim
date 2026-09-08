@@ -181,6 +181,10 @@ export function createScene(svg, handlers = {}) {
   // Downwind the sail works as a drag device: separated flow is the normal, healthy state.
   const dragMode = (sail, awaAbs) => awaAbs > 135 && sail.alpha > 20;
 
+  // Camber is time-dependent (flutter) in the collapsed, luffing, blanketed and soft states below,
+  // so only then does the scene need a redraw on every frame.
+  const flutters = (sail) => Boolean(sail) && (sail.collapsed || sail.alpha < 9 || (sail.factor !== undefined && sail.factor < 0.5));
+
   function camberFor(sail, awaAbs, t) {
     if (!sail) return 0.11;
     if (sail.collapsed) return 0.04 * Math.sin(t * 0.012);
@@ -254,17 +258,24 @@ export function createScene(svg, handlers = {}) {
 
   let lastR = null;
   let lastState = null;
+  let lastGhost = null;
 
   /**
    * @param {object} r evaluate() result
    * @param {object} state current state (normalised)
    * @param {{ghost:boolean}} opts
    * @param {number} now elapsed ms (drives luffing flutter)
+   * @returns {boolean} true while a sail flutters, i.e. the scene wants another frame
    */
   function update(r, stateIn, opts, now) {
+    const animating = flutters(r.sails.main) || flutters(r.sails.head);
+    // Redraw only when something changed or a sail is fluttering. Rewriting every SVG attribute
+    // on every frame kept the compositor busy with the boat sitting perfectly still.
+    if (r === lastR && opts.ghost === lastGhost && !animating) return false;
     const state = r.state ?? stateIn;
     lastR = r;
     lastState = state;
+    lastGhost = opts.ghost;
     const { hdg, twd, tws, twa, awa, aws } = r;
     gNoGo.setAttribute('transform', `rotate(${twd})`);
     gTrue.setAttribute('transform', `rotate(${twd})`);
@@ -412,6 +423,7 @@ export function createScene(svg, handlers = {}) {
     placeBadge(headBadge, headClew, geom.tack, `${headLabel}${state.head.windward && type.canWindward && hs.area > 0 ? ' ↔' : ''}`);
 
     if (drag) positionSnapLabels(drag.kind, sideSign, hdg);
+    return animating;
   }
 
   // ---------------------------------------------------------------------------

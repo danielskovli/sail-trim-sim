@@ -57,4 +57,9 @@ The page uses ES modules, so it must be served over HTTP; `file://` will not wor
   sommerfugl, lo/le); English is British spelling. Code and comments are US English.
 - Switching language reloads the page (static SVG text is created once); the choice lives in
   localStorage under `sail-trim-sim.lang`, and `?lang=nb` overrides it.
+- Rendering budget: the scene redraws only when the `evaluate()` result changes or a sail flutters, and the
+  particle canvas draws at CSS resolution and at most 30 fps. Keep it that way, and never put
+  `backdrop-filter` on panels over the canvas: re-blurring four panels on every frame pegged Firefox's GPU
+  process. Do not gate the streaks on `prefers-reduced-motion` either: they are the wind picture, not
+  decoration, and macOS Reduce Motion is on for many users for unrelated reasons.
 - Run `npm test` before committing; run the e2e suite after touching `scene.js` or `main.js`.

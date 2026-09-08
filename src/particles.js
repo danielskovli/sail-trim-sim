@@ -1,12 +1,20 @@
 // Animated wind particle layer (windy.com style streaks) on a full-window canvas.
+// The streaks are part of the picture, so they always run, but cheaply: the canvas renders at CSS
+// resolution rather than device pixels, caps the particle count and draws at most 30 times a second.
+// The browser already pauses requestAnimationFrame while the tab is hidden. Do not put
+// backdrop-filter panels over it: every panel would have to be re-blurred on each frame it changes.
 import { windCss } from './palette.js';
+
+const FRAME_MS = 1000 / 30;
+const MAX_PARTICLES = 1500;
+const PIXELS_PER_PARTICLE = 650;
 
 export function createParticles(canvas) {
   const ctx = canvas.getContext('2d');
   let w = 0;
   let h = 0;
-  let dpr = 1;
   let particles = [];
+  let lastDraw = -Infinity;
 
   function spawn(p) {
     p.x = Math.random() * w;
@@ -19,16 +27,16 @@ export function createParticles(canvas) {
   }
 
   function resize() {
-    dpr = Math.min(2, window.devicePixelRatio || 1);
     w = window.innerWidth;
     h = window.innerHeight;
-    canvas.width = Math.floor(w * dpr);
-    canvas.height = Math.floor(h * dpr);
+    // One canvas pixel per CSS pixel on purpose: a Retina-sized backing store doubled the per-frame work.
+    canvas.width = w;
+    canvas.height = h;
     canvas.style.width = `${w}px`;
     canvas.style.height = `${h}px`;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, w, h);
-    const count = Math.floor((w * h) / 650);
+    const count = Math.min(MAX_PARTICLES, Math.floor((w * h) / PIXELS_PER_PARTICLE));
     particles = Array.from({ length: count }, () => spawn({}));
   }
 
@@ -36,15 +44,19 @@ export function createParticles(canvas) {
   resize();
 
   /**
-   * @param {number} dt milliseconds since the previous frame
+   * Draw one frame if one is due. Call on every animation frame; the layer throttles itself.
    * @param {{tws:number, twd:number}} wind true wind (knots, degrees FROM)
    * @param {number} t elapsed ms
    */
-  function frame(dt, wind, t) {
-    const step = Math.min(3, dt / 16.7);
-    // Fade the previous frame to leave trails.
+  function frame(wind, t) {
+    const dt = t - lastDraw;
+    if (dt < FRAME_MS - 4) return; // tolerate rAF jitter so a 60 Hz display lands on every second frame
+    lastDraw = t;
+    const step = Math.min(3, dt / 16.7); // motion per draw scales with the time it covers
+
+    // Fade the previous frame to leave trails; the same trail length per second at any frame rate.
     ctx.globalCompositeOperation = 'destination-in';
-    ctx.fillStyle = 'rgba(0,0,0,0.9)';
+    ctx.fillStyle = `rgba(0,0,0,${Math.pow(0.9, step).toFixed(3)})`;
     ctx.fillRect(0, 0, w, h);
     ctx.globalCompositeOperation = 'source-over';
 
