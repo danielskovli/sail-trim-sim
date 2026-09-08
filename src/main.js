@@ -185,10 +185,6 @@ function change(mutate) {
   state.main.sheet = clamp(Math.round(state.main.sheet), 0, 90);
   state.head.sheet = clamp(Math.round(state.head.sheet), type.sheetMin, type.sheetMax);
   if (!type.canWindward) state.head.windward = false;
-  if (!type.always && !state.inventory[type.id]) {
-    state.head.type = 'genoa';
-    state.head.size = 'g135';
-  }
   checked = false;
   refresh();
 }

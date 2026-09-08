@@ -172,6 +172,28 @@ test('evaluate: under-canvassed and unbalanced plans are called out', () => {
   assert.equal(r.score.head, null, 'no headsail score when furled');
 });
 
+test('default scenario: full main + 100 % jib on a close reach, trimmed, with the genoa still recommended', () => {
+  const s = defaultState();
+  assert.equal(s.head.type, 'jib');
+  assert.equal(s.head.size, 'j100');
+  const r = evaluate(s);
+  assert.equal(r.pointOfSail, 'closereach');
+  assert.ok(r.score.total >= 95, `default scenario scores ${r.score.total}: ${keys(r).join(' | ')}`);
+  assert.equal(r.recommended.head.type, 'genoa', 'the coach still points at the bigger sail');
+  const plan = r.feedback.find((f) => f.key === 'plan.right');
+  assert.ok(plan, keys(r).join(' | '));
+  assert.match(plan.detail, /^Full main \+ jib at 100 %/, 'describes the plan the user has, not the recommended genoa');
+});
+
+test('normaliseState falls back to the genoa when the headsail in use is not aboard', () => {
+  const s = normaliseState({ ...defaultState(), inventory: { ...defaultState().inventory, jib: false } });
+  assert.equal(s.head.type, 'genoa');
+  assert.equal(s.head.size, 'g135');
+  const asym = normaliseState({ ...defaultState(), head: { type: 'asym', size: 'set', sheet: 60, windward: false }, inventory: { asym: false } });
+  assert.equal(asym.head.type, 'genoa');
+  assert.equal(normaliseState({ ...defaultState(), head: { type: 'asym', size: 'set', sheet: 60, windward: false } }).head.type, 'asym', 'aboard by default');
+});
+
 test('normaliseState migrates the legacy genoa key and repairs bad ids', () => {
   const s = normaliseState({ tws: 10, twd: 0, hdg: 90, main: { reef: 'r9', sheet: 5 }, genoa: { size: 'g70', sheet: 20, windward: true } });
   assert.equal(s.head.type, 'genoa');

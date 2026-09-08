@@ -461,8 +461,10 @@ export function defaultState() {
     tws: 14,
     twd: 320,
     hdg: 10,
+    // 14 kn on a close reach with full main and the working jib: a typical cruising setup that trims
+    // to 100, while the coach points out that the bigger genoa is available.
     main: { reef: 'full', sheet: 10 },
-    head: { type: 'genoa', size: 'g135', sheet: 12, windward: false },
+    head: { type: 'jib', size: 'j100', sheet: 10, windward: false },
     inventory: { ...DEFAULT_INVENTORY },
   };
 }
@@ -475,10 +477,12 @@ export function normaliseState(raw) {
   s.main = { ...d.main, ...(raw.main ?? {}) };
   const head = raw.head ?? (raw.genoa ? { type: 'genoa', ...raw.genoa } : null);
   s.head = { ...d.head, ...(head ?? {}) };
-  if (!HEADSAILS.some((h) => h.id === s.head.type)) s.head.type = 'genoa';
+  s.inventory = { ...DEFAULT_INVENTORY, ...(raw.inventory ?? {}) };
+  if (!HEADSAILS.some((h) => h.id === s.head.type)) s.head.type = d.head.type;
+  // The headsail in use must be aboard; the genoa is the only one that always is.
+  if (!headsail(s.head.type).always && !s.inventory[s.head.type]) s.head.type = 'genoa';
   if (!headsail(s.head.type).states.some((x) => x.id === s.head.size)) s.head.size = headsail(s.head.type).states[0].id;
   if (!MAIN_STATES.some((m) => m.id === s.main.reef)) s.main.reef = 'full';
-  s.inventory = { ...DEFAULT_INVENTORY, ...(raw.inventory ?? {}) };
   delete s.genoa;
   return s;
 }
@@ -601,7 +605,9 @@ export function evaluate(input) {
   } else {
     planScore = ratio >= 0.85 ? 100 : ratio >= 0.7 ? 80 : ratio >= 0.5 ? 55 : ratio >= 0.3 ? 30 : 10;
     if (planScore >= 100) {
-      push('good', 'plan', 'plan.right', { ...planParams, name: recName });
+      // Within 15 % of the recommended area counts as right, so describe the plan the user actually has.
+      const userName = planName({ main: state.main.reef, head: { type: state.head.type, size: state.head.size } });
+      push('good', 'plan', 'plan.right', { ...planParams, name: userName });
     } else {
       const swap = rec.head.type !== state.head.type && isKite(rec.head.type);
       if (swap) push(planScore >= 80 ? 'warn' : 'bad', 'plan', 'plan.kite', { ...planParams, name: recName, sail: sailName(recHead.id), sail_lc: lc(headLabel(recHead.id)).replace(/ \(.*\)$/, '') });
