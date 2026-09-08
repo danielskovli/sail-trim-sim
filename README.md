@@ -4,8 +4,7 @@ Which sails, how much of them, and how tight? Sail Trim Trainer is a top-down si
 **sail plan and trim on a 40 ft cruising sloop**. Set the wind and your heading, pick a headsail, reef, sheet,
 and a coach scores the result and tells you exactly what to change, in the language you'd hear on deck.
 
-**▶ [Try the live web app](https://sail-trim-sim.azurestaticapps.net/)** _(link goes live once the Azure Static
-Web App is connected, see [Deploying](#deploying))_
+**▶ [Try the live web app](https://icy-moss-0834b5403.3.azurestaticapps.net/)**
 
 ![Sail Trim Trainer: an asymmetric spinnaker on a broad reach, coach score 100](docs/screenshot.jpg)
 
@@ -107,16 +106,18 @@ The site is plain static files. The included GitHub Actions workflow deploys the
 **Azure Static Web Apps** on every push to `main` (and builds preview environments for pull requests),
 after running the unit tests.
 
-One-time setup, from an account with an Azure subscription:
+The production app is the Free-tier Static Web App `Sail-Trim-Sim` in resource group `Sail-Trim-Sim_group`
+(West Europe), deployment source "Other", so the only wiring is the deployment token stored as the
+repository secret `AZURE_STATIC_WEB_APPS_API_TOKEN`. To point the pipeline at a different Static Web App:
 
 ```sh
-az staticwebapp create --name sail-trim-sim --resource-group <rg> --location westeurope --sku Free
-az staticwebapp secrets list --name sail-trim-sim --query properties.apiKey -o tsv \
+az staticwebapp create --name <name> --resource-group <rg> --location westeurope --sku Free
+az staticwebapp secrets list --name <name> --resource-group <rg> --query properties.apiKey -o tsv \
   | gh secret set AZURE_STATIC_WEB_APPS_API_TOKEN --repo danielskovli/sail-trim-sim
 ```
 
-Then push to `main`. The default hostname is printed by `az staticwebapp show --name sail-trim-sim
---query defaultHostname`; put it in the link at the top of this README.
+Then push to `main` (or rerun the last workflow run). The deploy job is skipped automatically while the
+secret is missing, so the tests still run on forks.
 
 ## Licence
 
