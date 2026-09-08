@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sail Trim Trainer</title>
+  <meta name="description" content="Practise sail plan and trim on a 40 ft sloop: reefing, headsail choice, sheet angles and spinnakers, with live coaching." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9B%B5%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <canvas id="wind" aria-hidden="true"></canvas>
+
+  <div class="app">
+  <header class="brand">
+    <span class="logo">⛵</span>
+    <div>
+      <h1>Sail Trim Trainer</h1>
+      <p>40 ft sloop · main, genoa, jib, code 0 &amp; spinnakers</p>
+    </div>
+  </header>
+
+  <aside class="readouts" aria-label="Instruments">
+    <div class="tile" id="ro-tws-tile">
+      <div class="tile-label">True wind</div>
+      <div class="tile-value"><span id="ro-tws">–</span><small>kn</small></div>
+      <div class="tile-sub" id="ro-twd">–</div>
+    </div>
+    <div class="tile" id="ro-aws-tile">
+      <div class="tile-label">Apparent wind</div>
+      <div class="tile-value"><span id="ro-aws">–</span><small>kn</small></div>
+      <div class="tile-sub" id="ro-awa">–</div>
+    </div>
+    <div class="tile">
+      <div class="tile-label">Point of sail</div>
+      <div class="tile-value tile-text" id="ro-pos">–</div>
+      <div class="tile-sub" id="ro-twa">–</div>
+    </div>
+    <div class="tile">
+      <div class="tile-label">Boat speed</div>
+      <div class="tile-value"><span id="ro-bsp">–</span><small>kn</small></div>
+      <div class="tile-sub" id="ro-pol">–</div>
+    </div>
+    <div class="tile">
+      <div class="tile-label">VMG</div>
+      <div class="tile-value"><span id="ro-vmg">–</span><small>kn</small></div>
+      <div class="tile-sub" id="ro-vmg-sub">–</div>
+    </div>
+    <div class="tile">
+      <div class="tile-label">Heel</div>
+      <div class="tile-value tile-text" id="ro-heel">–</div>
+      <div class="heel-track"><div class="heel-bar" id="heel-bar"></div></div>
+    </div>
+  </aside>
+
+  <main class="stage">
+    <svg id="scene" role="img" aria-label="Top-down view of the boat, wind and sails"></svg>
+    <footer class="legend" aria-label="Wind speed scale">
+      <span class="legend-title">Wind speed (kn)</span>
+      <div class="legend-bar-wrap" id="legend-wrap" title="Drag to set wind speed">
+        <div class="legend-bar" id="legend-bar"></div>
+        <div class="legend-marker" id="legend-marker"></div>
+        <div class="legend-ticks" id="legend-ticks"></div>
+      </div>
+    </footer>
+  </main>
+
+  <section class="coach" aria-label="Coach feedback">
+    <div class="coach-head">
+      <div class="score">
+        <svg viewBox="0 0 100 100" width="92" height="92" aria-hidden="true">
+          <circle class="score-bg" cx="50" cy="50" r="44"></circle>
+          <circle class="score-fg" id="score-ring" cx="50" cy="50" r="44"></circle>
+        </svg>
+        <div class="score-text"><span id="score-num">–</span><span id="score-label">Coach</span></div>
+      </div>
+      <div class="coach-intro">
+        <h2>Coach</h2>
+        <p id="coach-summary">…</p>
+        <div class="score-parts" id="score-parts"></div>
+      </div>
+    </div>
+    <p id="coach-placeholder" class="placeholder" hidden>
+      Quiz mode — coaching is hidden until you press <b>Check my trim</b> (or <kbd>c</kbd>).
+    </p>
+    <ul id="feedback" class="feedback"></ul>
+  </section>
+
+  <aside class="panel" aria-label="Controls">
+    <div class="scenario" id="scenario-card">
+      <div class="scenario-head">
+        <span class="scenario-title">Scenario</span>
+        <button type="button" id="btn-scenario" class="btn primary" title="Random wind and heading (n)">New scenario</button>
+      </div>
+      <p id="scenario-text">…</p>
+      <div class="row-buttons">
+        <button type="button" id="btn-best" class="btn" title="Apply the recommended sail plan and trim">Show best setup</button>
+        <button type="button" id="btn-check" class="btn accent" hidden title="Reveal coaching (c)">Check my trim</button>
+        <button type="button" id="btn-reset" class="btn ghost" title="Back to the default scenario">Reset</button>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="in-quiz" />
+        <span>Quiz mode — hide coaching until I check</span>
+      </label>
+      <p class="hint drag-hint">
+        Drag directly on the chart: the wind arrow sets direction, the bow sets heading, and each sail's clew
+        sets its sheet — pull a clew in towards the mast to reef or furl, or across the boat to gybe the genoa.
+        Scroll (or drag the legend bar) for wind speed.
+      </p>
+    </div>
+
+    <section class="group">
+      <h3>Wind</h3>
+      <label class="field">
+        <div class="field-head"><span>Speed</span><output id="out-tws">–</output></div>
+        <input type="range" id="in-tws" min="0" max="50" step="0.5" />
+        <div class="field-sub" id="out-tws-sub"></div>
+      </label>
+      <label class="field">
+        <div class="field-head"><span>Direction (from)</span><output id="out-twd">–</output></div>
+        <input type="range" id="in-twd" min="0" max="359" step="1" />
+      </label>
+    </section>
+
+    <section class="group">
+      <h3>Boat</h3>
+      <label class="field">
+        <div class="field-head"><span>Heading</span><output id="out-hdg">–</output></div>
+        <input type="range" id="in-hdg" min="0" max="359" step="1" />
+        <div class="field-sub" id="out-twa"></div>
+      </label>
+    </section>
+
+    <section class="group">
+      <h3>Mainsail</h3>
+      <div class="segmented" id="main-reef"></div>
+      <label class="field">
+        <div class="field-head"><span>Sheet · boom angle</span><output id="out-main-sheet">–</output></div>
+        <input type="range" id="in-main-sheet" min="0" max="90" step="1" />
+        <div class="field-sub" id="out-main-side"></div>
+      </label>
+    </section>
+
+    <section class="group">
+      <h3>Headsail</h3>
+      <div class="segmented" id="head-type"></div>
+      <div class="segmented" id="head-size"></div>
+      <label class="field">
+        <div class="field-head"><span id="head-sheet-label">Sheet · clew angle</span><output id="out-head-sheet">–</output></div>
+        <input type="range" id="in-head-sheet" min="7" max="90" step="1" />
+        <div class="field-sub" id="out-head-side"></div>
+      </label>
+      <label class="toggle" id="head-windward-row">
+        <input type="checkbox" id="in-head-windward" />
+        <span>Set to windward (wing-on-wing / poled out)</span>
+      </label>
+      <p class="hint" id="head-envelope"></p>
+    </section>
+
+    <details class="group cheat">
+      <summary>Sails aboard</summary>
+      <p class="hint">Untick what your boat does not carry. The coach only recommends sails you have; the genoa and main are always aboard.</p>
+      <div class="inventory" id="inventory"></div>
+    </details>
+
+    <details class="group cheat">
+      <summary>Reefing cheat sheet</summary>
+      <p class="hint">Recommended main / headsail by true wind speed and point of sail, for the sails you have aboard.</p>
+      <table>
+        <thead>
+          <tr><th></th><th>Close-hauled<br /><small>45°</small></th><th>Beam reach<br /><small>90°</small></th><th>Broad reach<br /><small>135°</small></th><th>Run<br /><small>175°</small></th></tr>
+        </thead>
+        <tbody id="cheat-body"></tbody>
+      </table>
+    </details>
+
+    <details class="group cheat">
+      <summary>How it works</summary>
+      <p class="hint">
+        The dashed lines on the boat show where the coach would put each sail. Trim so the angle of attack sits just below
+        stall (~20–25°) upwind and ease to the shrouds downwind. Reef when the predicted heel passes ~24°.
+        The boat is a generic 40 ft cruising sloop: 45 m² main with three reefs, a 50 m² furling genoa, a working
+        jib, a storm jib, a code 0 and asymmetric and symmetric spinnakers. Each downwind sail has a wind-angle
+        envelope and a wind-speed limit; outside them it collapses or becomes dangerous, and the coach says so.
+      </p>
+      <p class="hint">
+        Everything on the chart is draggable; the sliders remain for fine adjustment.
+        Keys: <kbd>←</kbd>/<kbd>→</kbd> heading, <kbd>↑</kbd>/<kbd>↓</kbd> wind, <kbd>[</kbd>/<kbd>]</kbd> main sheet,
+        <kbd>,</kbd>/<kbd>.</kbd> genoa sheet, <kbd>n</kbd> new scenario, <kbd>c</kbd> check. Hold <kbd>Shift</kbd> for bigger steps.
+      </p>
+    </details>
+  </aside>
+
+  </div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

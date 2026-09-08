@@ -1,0 +1,15 @@
+# Dependencies (there are none, but just in case)
+node_modules/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+
+# Local e2e artefacts (screenshots, headless Chrome profile)
+test/e2e/out/
+test/e2e/chrome-profile/
+
+# Azure Static Web Apps CLI
+.azure/

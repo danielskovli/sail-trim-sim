@@ -1,0 +1,22 @@
+{
+  "name": "sail-trim-sim",
+  "version": "0.2.0",
+  "description": "Top-down sail plan and trim trainer for a 40 ft sloop: reefing, headsail choice (genoa, jib, storm jib, code 0, spinnakers), sheet angles and live coaching, with windy.com-inspired visuals.",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "author": "Daniel Skovli",
+  "homepage": "https://github.com/danielskovli/sail-trim-sim",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/danielskovli/sail-trim-sim.git"
+  },
+  "scripts": {
+    "start": "node serve.mjs 5173",
+    "test": "node --test test/*.test.js",
+    "test:e2e": "node test/e2e/drag.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
