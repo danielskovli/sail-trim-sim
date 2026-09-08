@@ -44,5 +44,12 @@ The page uses ES modules, so it must be served over HTTP; `file://` will not wor
   decides when it is recommended.
 - Every behaviour claim in coaching text should be backed by a test in `test/model.test.js`.
   The "recommended setup scores ≥ 85 everywhere" test is the regression net for the planner.
-- User-facing text is British English. Code and comments are US English.
+- **All user-facing text goes through `src/i18n.js`.** The model emits feedback as `{key, params}` and
+  resolves `title`/`detail` with `t()`; the UI uses `t()`, `data-i18n` attributes and the label helpers
+  (`sailName`, `mainLabel`, `headStateShort`, …). Never hard-code an English sentence in `main.js`,
+  `scene.js` or `model.js`. Every key must exist in both `en` and `nb` with the same placeholders; a
+  unit test enforces it. Norwegian uses real sailing terminology (bidevind, slør, lens, skjøte,
+  sommerfugl, lo/le); English is British spelling. Code and comments are US English.
+- Switching language reloads the page (static SVG text is created once); the choice lives in
+  localStorage under `sail-trim-sim.lang`, and `?lang=nb` overrides it.
 - Run `npm test` before committing; run the e2e suite after touching `scene.js` or `main.js`.

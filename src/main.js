@@ -2,12 +2,52 @@ import {
   evaluate, applyRecommended, randomScenario, defaultState, normaliseState, recommend,
   MAIN_STATES, HEADSAILS, headsail, headState, mainState, compassName, clamp, norm360,
 } from './model.js';
+import {
+  LANGS, t, nf, nfKn, fmt3, setLanguage, getLanguage, detectLanguage, applyStaticTranslations,
+  mainLabel, mainShort, sailName, headLabel, headStateLabel, headStateShort, lc,
+} from './i18n.js';
 import { createParticles } from './particles.js';
 import { createScene } from './scene.js';
 import { legendGradient, windCss } from './palette.js';
 
 const $ = (id) => document.getElementById(id);
 const STORAGE_KEY = 'sail-trim-sim.v1';
+const LANG_KEY = 'sail-trim-sim.lang';
+
+// ---------------------------------------------------------------------------
+// Language (chosen before anything renders; switching reloads the page)
+// ---------------------------------------------------------------------------
+
+let savedLang = null;
+try { savedLang = localStorage.getItem(LANG_KEY); } catch { /* ignore */ }
+setLanguage(detectLanguage(location.search, savedLang, navigator.language));
+document.documentElement.lang = getLanguage();
+document.title = t('app.title');
+applyStaticTranslations(document);
+{
+  const box = $('lang');
+  box.setAttribute('aria-label', t('lang.label'));
+  for (const l of LANGS) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'lang-btn' + (l.id === getLanguage() ? ' active' : '');
+    b.textContent = l.label;
+    b.title = l.name;
+    b.setAttribute('aria-pressed', String(l.id === getLanguage()));
+    b.addEventListener('click', () => {
+      if (l.id === getLanguage()) return;
+      try { localStorage.setItem(LANG_KEY, l.id); } catch { /* ignore */ }
+      const url = new URL(location.href);
+      url.searchParams.delete('lang');
+      location.replace(url.toString());
+    });
+    box.appendChild(b);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
 
 function loadState() {
   try {
@@ -30,7 +70,7 @@ function saveState() {
 
 /**
  * Optional scenario in the URL, e.g.
- *   ?tws=22&twd=300&hdg=350&main=r1:6&head=jib:j100:8&quiz=1
+ *   ?tws=22&twd=300&hdg=350&main=r1:6&head=jib:j100:8&quiz=1&lang=nb
  *   ?tws=12&twd=0&hdg=150&head=asym:set:80&inv=jib,asym
  * `genoa=g100:8` is accepted as a legacy spelling of `head=genoa:g100:8`; `wow=1` sets it to windward.
  */
@@ -156,56 +196,61 @@ function change(mutate) {
 function setHeadType(id) {
   change((s) => {
     if (s.head.type === id) return;
-    const t = headsail(id);
+    const type = headsail(id);
     s.head.type = id;
-    s.head.size = t.states[0].id;
+    s.head.size = type.states[0].id;
     s.head.windward = false;
     // Start from a sensible sheet for the new sail at the current apparent wind.
-    const r = evaluate({ ...s, head: { ...s.head, sheet: t.sheetMin } });
-    s.head.sheet = r.sails.head ? r.sails.head.optSheet : t.sheetMin;
+    const r = evaluate({ ...s, head: { ...s.head, sheet: type.sheetMin } });
+    s.head.sheet = r.sails.head ? r.sails.head.optSheet : type.sheetMin;
   });
 }
+
+const tackWord = (r) => t(`tack.${r.tack}`);
+const tackShort = (r) => t(`tack.${r.tack}.short`);
 
 function syncControls() {
   const type = headsail(state.head.type);
   const hs = headState(type.id, state.head.size);
   $('in-tws').value = state.tws;
-  $('out-tws').textContent = `${state.tws.toFixed(state.tws < 10 ? 1 : 0)} kn`;
-  $('out-tws-sub').textContent = `Bft ${result.beaufort.force} · ${result.beaufort.label}`;
+  $('out-tws').textContent = `${nfKn(state.tws)} ${t('unit.kn')}`;
+  $('out-tws-sub').textContent = t('field.bft', { bft: result.beaufort.force, label: result.beaufort.label });
   $('in-twd').value = state.twd;
-  $('out-twd').textContent = `${String(Math.round(state.twd)).padStart(3, '0')}° ${compassName(state.twd)}`;
+  $('out-twd').textContent = `${fmt3(state.twd)}° ${compassName(state.twd)}`;
   $('in-hdg').value = state.hdg;
-  $('out-hdg').textContent = `${String(Math.round(state.hdg)).padStart(3, '0')}° ${compassName(state.hdg)}`;
-  $('out-twa').textContent = `TWA ${result.twaAbs.toFixed(0)}° ${result.tack === 'starboard' ? 'stbd' : 'port'} · ${result.pointOfSail}`;
+  $('out-hdg').textContent = `${fmt3(state.hdg)}° ${compassName(state.hdg)}`;
+  $('out-twa').textContent = t('field.twa', { twa: nf(result.twaAbs), tack: tackShort(result), pos: t(`pos.${result.pointOfSail}`) });
 
-  buildSegmented($('main-reef'), MAIN_STATES, state.main.reef, (id) => change((s) => { s.main.reef = id; }));
+  buildSegmented($('main-reef'), MAIN_STATES.map((m) => ({ id: m.id, short: mainShort(m.id), title: `${mainLabel(m.id)} · ${m.area} m²` })), state.main.reef,
+    (id) => change((s) => { s.main.reef = id; }));
   $('in-main-sheet').value = state.main.sheet;
   $('out-main-sheet').textContent = `${state.main.sheet}°`;
-  $('out-main-side').textContent = state.main.reef === 'down' ? 'main is down' : `boom to ${result.tack === 'starboard' ? 'port' : 'starboard'}`;
+  $('out-main-side').textContent = state.main.reef === 'down' ? t('side.main_down') : t('side.boom', { side: t(result.tack === 'starboard' ? 'tack.port' : 'tack.starboard') });
 
-  const aboard = HEADSAILS.filter((h) => h.always || state.inventory[h.id]).map((h) => ({ id: h.id, short: h.short, title: h.label }));
+  const aboard = HEADSAILS.filter((h) => h.always || state.inventory[h.id]).map((h) => ({ id: h.id, short: sailName(h.id), title: headLabel(h.id) }));
   buildSegmented($('head-type'), aboard, type.id, setHeadType);
-  buildSegmented($('head-size'), type.states, state.head.size, (id) => change((s) => { s.head.size = id; }));
+  buildSegmented($('head-size'), type.states.map((st) => ({ id: st.id, short: headStateShort(type.id, st.id), title: `${headStateLabel(type.id, st.id)} · ${st.area} m²` })), state.head.size,
+    (id) => change((s) => { s.head.size = id; }));
   const slider = $('in-head-sheet');
   slider.min = type.sheetMin;
   slider.max = type.sheetMax;
   slider.value = state.head.sheet;
-  $('head-sheet-label').textContent = type.control === 'pole' ? 'Pole angle from the bow' : 'Sheet · clew angle';
+  $('head-sheet-label').textContent = t(type.control === 'pole' ? 'field.pole' : 'field.headsheet');
   $('out-head-sheet').textContent = `${state.head.sheet}°`;
-  const windwardSide = result.tack === 'starboard' ? 'starboard' : 'port';
-  const leewardSide = result.tack === 'starboard' ? 'port' : 'starboard';
+  const windwardSide = t(result.tack === 'starboard' ? 'tack.starboard' : 'tack.port');
+  const leewardSide = t(result.tack === 'starboard' ? 'tack.port' : 'tack.starboard');
   let sideText;
-  if (hs.area === 0) sideText = `${type.short.toLowerCase()} is ${hs.short.toLowerCase()}`;
-  else if (type.control === 'pole') sideText = `pole to ${windwardSide} (windward)`;
-  else if (state.head.windward && type.canWindward) sideText = `set to windward (${windwardSide})`;
-  else sideText = `set to leeward (${leewardSide})`;
+  if (hs.area === 0) sideText = t('side.head_state', { sail: lc(sailName(type.id)), state: lc(headStateLabel(type.id, hs.id)) });
+  else if (type.control === 'pole') sideText = t('side.pole', { side: windwardSide });
+  else if (state.head.windward && type.canWindward) sideText = t('side.windward', { side: windwardSide });
+  else sideText = t('side.leeward', { side: leewardSide });
   $('out-head-side').textContent = sideText;
   $('head-windward-row').hidden = !type.canWindward;
   $('in-head-windward').checked = Boolean(state.head.windward);
   const env = [];
-  if (type.minAwa > 0 || type.maxAwa < 180) env.push(`flies at ${type.minAwa}–${type.maxAwa}° apparent`);
-  if (Number.isFinite(type.maxTws)) env.push(`up to ${type.maxTws} kn true`);
-  $('head-envelope').textContent = env.length ? `${type.label}: ${env.join(', ')}.` : `${type.label}: all angles, all winds.`;
+  if (type.minAwa > 0 || type.maxAwa < 180) env.push(t('env.range', { min: type.minAwa, max: type.maxAwa }));
+  if (Number.isFinite(type.maxTws)) env.push(t('env.max', { max: type.maxTws }));
+  $('head-envelope').textContent = t('env.text', { label: headLabel(type.id), items: env.length ? env.join(', ') : t('env.all') });
 
   const inv = $('inventory');
   inv.innerHTML = '';
@@ -217,7 +262,7 @@ function syncControls() {
     cb.checked = Boolean(state.inventory[h.id]);
     cb.addEventListener('change', () => change((s) => { s.inventory[h.id] = cb.checked; }));
     label.appendChild(cb);
-    label.appendChild(document.createTextNode(h.label));
+    label.appendChild(document.createTextNode(headLabel(h.id)));
     inv.appendChild(label);
   }
 
@@ -290,24 +335,26 @@ function flash(node) {
 
 function renderReadouts() {
   const r = result;
-  $('ro-tws').textContent = r.tws.toFixed(r.tws < 10 ? 1 : 0);
-  $('ro-twd').textContent = `${String(Math.round(r.twd)).padStart(3, '0')}° ${compassName(r.twd)} · Bft ${r.beaufort.force}`;
-  $('ro-aws').textContent = r.aws.toFixed(r.aws < 10 ? 1 : 0);
-  $('ro-awa').textContent = r.twaAbs < 30 ? 'in irons' : `${r.awaAbs.toFixed(0)}° ${r.tack === 'starboard' ? 'stbd' : 'port'}`;
-  $('ro-pos').textContent = r.pointOfSail;
-  $('ro-twa').textContent = `TWA ${r.twaAbs.toFixed(0)}° · ${r.tack} tack`;
-  $('ro-bsp').textContent = r.speed.toFixed(1);
-  $('ro-pol').textContent = `target ${r.polarSpeed.toFixed(1)} kn`;
-  $('ro-vmg').textContent = Math.abs(r.vmg).toFixed(1);
-  $('ro-vmg-sub').textContent = r.vmg >= 0 ? 'upwind' : 'downwind';
-  $('ro-heel').textContent = `${r.heel.toFixed(0)}°`;
+  $('ro-tws').textContent = nfKn(r.tws);
+  $('ro-twd').textContent = t('ro.twd', { deg: fmt3(r.twd), name: compassName(r.twd), bft: r.beaufort.force });
+  $('ro-aws').textContent = nfKn(r.aws);
+  $('ro-awa').textContent = r.twaAbs < 30 ? t('ro.irons') : `${nf(r.awaAbs)}° ${tackShort(r)}`;
+  $('ro-pos').textContent = t(`pos.${r.pointOfSail}`);
+  $('ro-twa').textContent = t('ro.twa', { twa: nf(r.twaAbs), tack: tackWord(r) });
+  $('ro-bsp').textContent = nf(r.speed, 1);
+  $('ro-pol').textContent = t('ro.target', { v: nf(r.polarSpeed, 1) });
+  $('ro-vmg').textContent = nf(Math.abs(r.vmg), 1);
+  $('ro-vmg-sub').textContent = t(r.vmg >= 0 ? 'ro.upwind' : 'ro.downwind');
+  $('ro-heel').textContent = `${nf(r.heel)}°`;
   const bar = $('heel-bar');
   bar.style.width = `${clamp((r.heel / 45) * 100, 0, 100)}%`;
   bar.dataset.level = r.heel > 30 ? 'bad' : r.heel > 24 ? 'warn' : 'ok';
   $('ro-tws-tile').style.setProperty('--accent', windCss(r.tws));
   $('ro-aws-tile').style.setProperty('--accent', windCss(r.aws));
 
-  $('scenario-text').textContent = `${r.tws.toFixed(r.tws < 10 ? 1 : 0)} kn from ${compassName(r.twd)} (${String(Math.round(r.twd)).padStart(3, '0')}°), heading ${String(Math.round(r.hdg)).padStart(3, '0')}° — ${r.pointOfSail.toLowerCase()} on ${r.tack} tack.`;
+  $('scenario-text').textContent = t('scenario.text', {
+    tws: nfKn(r.tws), name: compassName(r.twd), deg: fmt3(r.twd), hdg: fmt3(r.hdg), pos: lc(t(`pos.${r.pointOfSail}`)), tack: tackWord(r),
+  });
 }
 
 const ICONS = { good: '✓', info: 'i', warn: '!', bad: '✕' };
@@ -326,8 +373,8 @@ function renderCoach() {
     ring.style.strokeDashoffset = circumference;
     ring.style.stroke = 'rgba(255,255,255,0.25)';
     num.textContent = '?';
-    label.textContent = 'Quiz mode';
-    $('coach-summary').textContent = 'Set your sails for the conditions, then press Check my trim.';
+    label.textContent = t('coach.quiz_label');
+    $('coach-summary').textContent = t('coach.quiz_summary');
     $('score-parts').innerHTML = '';
     return;
   }
@@ -336,23 +383,29 @@ function renderCoach() {
   ring.style.strokeDashoffset = circumference * (1 - s / 100);
   ring.style.stroke = s >= 85 ? '#5fc06a' : s >= 60 ? '#e2b84a' : '#ea5f52';
   num.textContent = String(s);
-  label.textContent = s >= 90 ? 'Excellent' : s >= 75 ? 'Good' : s >= 55 ? 'Needs work' : s >= 30 ? 'Poor' : 'Dangerous';
+  label.textContent = t(s >= 90 ? 'score.excellent' : s >= 75 ? 'score.good' : s >= 55 ? 'score.needswork' : s >= 30 ? 'score.poor' : 'score.dangerous');
   const rec = result.recommended;
   const recType = headsail(rec.head.type);
   const trims = [];
-  if (rec.mainSheet !== null) trims.push(`main ${rec.mainSheet}°`);
-  if (rec.headSheet !== null) trims.push(recType.control === 'pole' ? `pole ${rec.headSheet}°` : `${recType.short.toLowerCase()} ${rec.headSheet}°${rec.headWindward ? ' to windward' : ''}`);
-  $('coach-summary').textContent = `Recommended here: ${rec.name.toLowerCase()}${trims.length ? `, ${trims.join(', ')}` : ''}. Target speed ${rec.speed.toFixed(1)} kn, you make ${result.speed.toFixed(1)} kn.`;
+  if (rec.mainSheet !== null) trims.push(t('coach.trim_main', { v: rec.mainSheet }));
+  if (rec.headSheet !== null) {
+    trims.push(recType.control === 'pole'
+      ? t('coach.trim_pole', { v: rec.headSheet })
+      : t('coach.trim_head', { sail: lc(sailName(recType.id)), v: rec.headSheet }) + (rec.headWindward ? t('coach.trim_windward') : ''));
+  }
+  $('coach-summary').textContent = t('coach.summary', {
+    name: lc(rec.name), trims: trims.length ? `, ${trims.join(', ')}` : '', target: nf(rec.speed, 1), speed: nf(result.speed, 1),
+  });
   for (const f of result.feedback) {
     const li = document.createElement('li');
     li.className = `fb fb-${f.severity}`;
     li.innerHTML = `<span class="fb-icon">${ICONS[f.severity]}</span><div><div class="fb-title">${f.title}</div><div class="fb-detail">${f.detail}</div></div>`;
     list.appendChild(li);
   }
-  const parts = [['Course', result.score.course], ['Sail plan', result.score.plan], ['Main', result.score.main], ['Headsail', result.score.head]];
+  const parts = [['part.course', result.score.course], ['part.plan', result.score.plan], ['part.main', result.score.main], ['part.head', result.score.head]];
   $('score-parts').innerHTML = parts
     .filter(([, v]) => v !== null)
-    .map(([k, v]) => `<span class="part" data-level="${v >= 85 ? 'ok' : v >= 60 ? 'warn' : 'bad'}">${k} <b>${v}</b></span>`)
+    .map(([k, v]) => `<span class="part" data-level="${v >= 85 ? 'ok' : v >= 60 ? 'warn' : 'bad'}">${t(k)} <b>${v}</b></span>`)
     .join('');
 }
 
@@ -362,10 +415,10 @@ function renderLegend() {
   const ticks = $('legend-ticks');
   ticks.innerHTML = '';
   for (let k = 0; k <= max; k += 5) {
-    const t = document.createElement('span');
-    t.style.left = `${(100 * k) / max}%`;
-    t.textContent = k;
-    ticks.appendChild(t);
+    const tick = document.createElement('span');
+    tick.style.left = `${(100 * k) / max}%`;
+    tick.textContent = k;
+    ticks.appendChild(tick);
   }
 }
 function updateLegendMarker() {
@@ -382,13 +435,13 @@ function renderCheatSheet() {
   body.innerHTML = '';
   for (let tws = 5; tws <= 45; tws += 5) {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<th>${tws} kn</th>` + cols.map((twa) => {
+    tr.innerHTML = `<th>${tws} ${t('unit.kn')}</th>` + cols.map((twa) => {
       const p = recommend(tws, twa, state.inventory);
       const m = mainState(p.main);
-      const t = headsail(p.head.type);
+      const type = headsail(p.head.type);
       const hs = headState(p.head.type, p.head.size);
-      const headText = hs.area === 0 ? '—' : t.states.length > 2 ? `${t.short} ${hs.short}` : t.short;
-      return `<td>${m.area ? m.short : '—'} / ${headText}</td>`;
+      const headText = hs.area === 0 ? '—' : type.states.length > 2 ? `${sailName(type.id)} ${headStateShort(type.id, hs.id)}` : sailName(type.id);
+      return `<td>${m.area ? mainShort(m.id) : '—'} / ${headText}</td>`;
     }).join('');
     body.appendChild(tr);
   }

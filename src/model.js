@@ -9,6 +9,8 @@
 //  - Sheet angles are the angle of the sail's foot from the centreline (0 = amidships).
 //    For the symmetric spinnaker the control is the pole angle from the bow (0 = forward, 90 = square).
 
+import { t, nf, lc, uc, sailName, headLabel, headStateShort, mainLabel } from './i18n.js';
+
 export const DEG = Math.PI / 180;
 export const rad = (d) => d * DEG;
 export const deg = (r) => r / DEG;
@@ -148,21 +150,23 @@ const BEAUFORT = [
 ];
 export function beaufort(knots) {
   const force = BEAUFORT.findIndex(([max]) => knots < max);
-  return { force, label: BEAUFORT[force][1] };
+  return { force, label: t(`bft.${force}`), english: BEAUFORT[force][1] };
 }
 
 const COMPASS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
-export const compassName = (dir) => COMPASS[Math.round(norm360(dir) / 22.5) % 16];
+export const compassName = (dir) => t(`compass.${COMPASS[Math.round(norm360(dir) / 22.5) % 16]}`);
 
+/** Point of sail as an id; display it with t(`pos.${id}`). */
 export function pointOfSail(twaAbs) {
-  if (twaAbs < 30) return 'In irons';
-  if (twaAbs < 50) return 'Close-hauled';
-  if (twaAbs < 80) return 'Close reach';
-  if (twaAbs < 100) return 'Beam reach';
-  if (twaAbs < 150) return 'Broad reach';
-  if (twaAbs < 172) return 'Running';
-  return 'Dead run';
+  if (twaAbs < 30) return 'irons';
+  if (twaAbs < 50) return 'closehauled';
+  if (twaAbs < 80) return 'closereach';
+  if (twaAbs < 100) return 'beam';
+  if (twaAbs < 150) return 'broad';
+  if (twaAbs < 172) return 'running';
+  return 'deadrun';
 }
+export const pointOfSailLabel = (twaAbs) => t(`pos.${pointOfSail(twaAbs)}`);
 
 /** Apparent wind from true wind angle (signed, deg), true wind speed and boat speed. */
 export function apparentWind(tws, twa, boatSpeed) {
@@ -391,18 +395,19 @@ export function recommendedStage(tws, twaAbs) {
   return Math.max(stage, twsCapStage(tws));
 }
 
+/** Human-readable plan name in the current language, e.g. "Full main + asymmetric spinnaker". */
 export function planName(plan) {
   const m = mainState(plan.main);
   const h = headsail(plan.head.type);
   const hs = headState(plan.head.type, plan.head.size);
-  if (m.area === 0 && hs.area === 0) return 'Bare poles';
-  const mainText = m.area === 0 ? 'main down' : m.id === 'full' ? 'full main' : `main at ${m.label.toLowerCase()}`;
+  if (m.area === 0 && hs.area === 0) return t('plan.name.bare');
+  const mainText = m.area === 0 ? t('plan.name.main_down') : m.id === 'full' ? t('plan.name.full_main') : t('plan.name.main_reef', { reef: lc(mainLabel(m.id)) });
+  const sail = lc(sailName(h.id));
   let headText;
-  if (hs.area === 0) headText = h.id === 'genoa' || h.id === 'jib' || h.id === 'code0' ? `${h.short.toLowerCase()} furled` : `${h.short.toLowerCase()} down`;
-  else if (h.states.length > 2) headText = `${h.short.toLowerCase()} at ${hs.short}`;
-  else headText = h.label.toLowerCase().replace(/ \(.*\)$/, '');
-  const text = `${mainText} + ${headText}`;
-  return text.charAt(0).toUpperCase() + text.slice(1);
+  if (hs.area === 0) headText = h.id === 'genoa' || h.id === 'jib' || h.id === 'code0' ? t('plan.name.head_furled', { sail }) : t('plan.name.head_down', { sail });
+  else if (h.states.length > 2) headText = t('plan.name.head_at', { sail, state: headStateShort(h.id, hs.id) });
+  else headText = lc(headLabel(h.id)).replace(/ \(.*\)$/, '');
+  return uc(t('plan.name.join', { main: mainText, head: headText }));
 }
 
 /**
@@ -540,30 +545,30 @@ export function evaluate(input) {
   const mainOpt = mainArea > 0 ? optimalTrim(mSpec, wind.awaAbs) : null;
   const headOpt = headArea > 0 ? optimalTrim(hSpec, wind.awaAbs) : null;
 
+  // Feedback items carry a message key plus parameters; title/detail are resolved in the current
+  // language here so consumers can display them directly (and tests can assert on the key).
   const feedback = [];
-  const push = (severity, area, title, detail) => feedback.push({ severity, area, title, detail });
+  const push = (severity, area, key, params = {}, detailKey = `${key}.detail`, titleKey = `${key}.title`) => {
+    feedback.push({ severity, area, key, params, title: t(titleKey, params), detail: t(detailKey, params) });
+  };
+  const deg0 = (v) => nf(v, 0);
+  const tackName = t(`tack.${tack}`);
 
   // --- Course -------------------------------------------------------------
   let courseScore = 100;
   if (twaAbs < NO_GO_ANGLE) {
     courseScore = 0;
-    push('bad', 'course', 'In irons — you are inside the no-go zone',
-      `The wind is only ${twaAbs.toFixed(0)}° off the bow. Bear away to at least 40–45° true wind angle before anything else matters.`);
+    push('bad', 'course', 'course.irons', { twa: deg0(twaAbs) });
   } else if (twaAbs < 38) {
     courseScore = Math.round(lerp(40, 100, (twaAbs - NO_GO_ANGLE) / (38 - NO_GO_ANGLE)));
-    push('warn', 'course', 'Pinching', `At ${twaAbs.toFixed(0)}° true the sails can barely fill. Bear away a few degrees to ~42–45° for real speed.`);
+    push('warn', 'course', 'course.pinching', { twa: deg0(twaAbs) });
   } else if (twaAbs >= 172) {
     courseScore = 85;
     const kite = isKite(state.head.type) && headArea > 0;
-    push('info', 'course', 'Dead run', state.head.type === 'sym' && headArea > 0
-      ? 'Squared-back pole and a preventer on the boom — an accidental gybe is the main risk on a dead run.'
-      : kite
-        ? 'An asymmetric wants apparent wind: heat up to ~150° true and gybe downwind; it collapses behind the main dead downwind.'
-        : headWindward
-          ? 'Wing-on-wing is the right call here. Rig a preventer on the boom — an accidental gybe is the main risk on a dead run.'
-          : 'Risk of an accidental gybe, and the headsail sits in the main’s wind shadow. Set it to windward (wing-on-wing), hoist a kite, or heat up to ~150° for better VMG.');
-  } else if (pos === 'Close-hauled') {
-    push('good', 'course', 'Close-hauled', `Sailing ${twaAbs.toFixed(0)}° to the true wind on ${tack} tack — a good upwind angle.`);
+    const variant = state.head.type === 'sym' && headArea > 0 ? 'sym' : kite ? 'kite' : headWindward ? 'wow' : 'default';
+    push('info', 'course', 'course.deadrun', {}, `course.deadrun.${variant}`);
+  } else if (pos === 'closehauled') {
+    push('good', 'course', 'course.closehauled', { twa: deg0(twaAbs), tack: tackName });
   }
 
   // --- Sail plan (area and choice of headsail) --------------------------------
@@ -571,48 +576,42 @@ export function evaluate(input) {
   const ratio = recArea > 0 ? userArea / recArea : userArea > 0 ? Infinity : 1;
   let planScore = 100;
   const recName = rec.name;
+  const recNameLc = lc(recName);
   const recHead = headsail(rec.head.type);
+  const planParams = { user: userArea, rec: recArea, name: recNameLc, tws: deg0(tws), aws: deg0(wind.aws), heel: deg0(heel), twa: deg0(twaAbs) };
   if (overLimit) {
     planScore = 10;
-    push('bad', 'plan', `Too much wind for the ${hSpec.type.short.toLowerCase()}`,
-      `${tws.toFixed(0)} kn true is over its ${hSpec.type.maxTws} kn limit — expect broaches or a blown-out sail. Get it down and go to white sails: ${recName.toLowerCase()}.`);
+    push('bad', 'plan', 'plan.overlimit', { ...planParams, sail: sailName(hSpec.id), sail_lc: lc(sailName(hSpec.id)), max: hSpec.type.maxTws, rec: recNameLc });
   } else if (tws < 3) {
     planScore = userArea >= 0.8 * FULL_AREA ? 100 : 70;
-    push(userArea >= 0.8 * FULL_AREA ? 'good' : 'warn', 'plan', 'Drifting conditions',
-      `Hardly any wind. Hoist everything you have — ${recName.toLowerCase()} — and keep the sails full.`);
+    push(userArea >= 0.8 * FULL_AREA ? 'good' : 'warn', 'plan', 'plan.drifting', { rec: recNameLc });
   } else if (recArea === 0) {
     planScore = userArea === 0 ? 100 : Math.max(0, 100 - Math.round(userArea * 3));
-    push(userArea === 0 ? 'good' : 'bad', 'plan', 'Survival conditions',
-      `In ${tws.toFixed(0)} kn true the recommendation is bare poles (or a storm jib / trysail), and to heave to or run off.`);
+    push(userArea === 0 ? 'good' : 'bad', 'plan', 'plan.survival', planParams);
   } else if (ratio > 1.001) {
     const heelScore = heel <= HEEL_COMFORT ? 100 : heel <= 28 ? 80 : heel <= 32 ? 55 : heel <= 38 ? 25 : 5;
     const ratioScore = ratio <= 1.2 ? 100 : ratio <= 1.4 ? 75 : ratio <= 1.7 ? 50 : 25;
     planScore = Math.min(heelScore, ratioScore);
     if (planScore >= 100) {
-      push('good', 'plan', 'Sail plan is fine', `Carrying ${userArea} m² of ${recArea} m² recommended (${recName.toLowerCase()}). Heel ~${heel.toFixed(0)}°.`);
+      push('good', 'plan', 'plan.fine', planParams);
     } else {
       const sev = planScore >= 75 ? 'warn' : 'bad';
-      const heelText = heel > HEEL_COMFORT ? `Predicted heel ${heel.toFixed(0)}° — ` : '';
-      push(sev, 'plan', planScore >= 75 ? 'A bit too much sail' : 'Overpowered — reduce sail',
-        `${heelText}you are carrying ${userArea} m² where ${recArea} m² is about right. Recommended: ${recName.toLowerCase()}.`);
+      push(sev, 'plan', planScore >= 75 ? 'plan.bitmuch' : 'plan.overpowered', planParams, heel > HEEL_COMFORT ? 'plan.over.detail_heel' : 'plan.over.detail');
     }
   } else {
     planScore = ratio >= 0.85 ? 100 : ratio >= 0.7 ? 80 : ratio >= 0.5 ? 55 : ratio >= 0.3 ? 30 : 10;
     if (planScore >= 100) {
-      push('good', 'plan', 'Sail plan is right for the conditions',
-        `${recName} — ${userArea} m² for ${tws.toFixed(0)} kn true (${wind.aws.toFixed(0)} kn apparent).`);
+      push('good', 'plan', 'plan.right', { ...planParams, name: recName });
     } else {
       const swap = rec.head.type !== state.head.type && isKite(rec.head.type);
-      push(planScore >= 80 ? 'warn' : 'bad', 'plan', swap ? `Time for the ${recHead.short.toLowerCase()}` : planScore >= 80 ? 'Slightly under-canvassed' : 'Under-canvassed',
-        swap
-          ? `Only ${userArea} m² up; ${recArea} m² would be right. ${recName} is the fast setup at ${twaAbs.toFixed(0)}° true in ${tws.toFixed(0)} kn.`
-          : `Only ${userArea} m² up; ${recArea} m² would be right. Shake out a reef / unfurl: ${recName.toLowerCase()}.`);
+      if (swap) push(planScore >= 80 ? 'warn' : 'bad', 'plan', 'plan.kite', { ...planParams, name: recName, sail: sailName(recHead.id), sail_lc: lc(headLabel(recHead.id)).replace(/ \(.*\)$/, '') });
+      else push(planScore >= 80 ? 'warn' : 'bad', 'plan', planScore >= 80 ? 'plan.under_slight' : 'plan.under', planParams, 'plan.under.detail');
     }
   }
   // A different headsail of similar size: a nudge, not a penalty.
   if (planScore >= 80 && !overLimit && headArea > 0 && rec.head.type !== state.head.type && Math.abs(ratio - 1) < 0.2) {
     if (hSpec.shape < 1 && (rec.head.type === 'jib' || rec.head.type === 'storm')) {
-      push('info', 'plan', `A ${recHead.short.toLowerCase()} would set better`, `A genoa furled to ${hSpec.state.short} is baggy and heels more per knot; a ${recHead.label.toLowerCase()} of the same size holds its shape.`);
+      push('info', 'plan', 'plan.better_sail', { sail: sailName(recHead.id), sail_lc: lc(sailName(recHead.id)), furl: headStateShort(hSpec.id, hSpec.state.id), label: lc(headLabel(recHead.id)) });
     }
   }
   // Balance between main and headsail (white sails only)
@@ -620,30 +619,34 @@ export function evaluate(input) {
     const share = mainArea / userArea;
     if (share < 0.25) {
       planScore = Math.round(planScore * 0.7);
-      push('warn', 'plan', 'Headsail-heavy sail plan', 'With little or no main the boat carries lee helm and points poorly. Get some main up to balance the rig.');
+      push('warn', 'plan', 'plan.headheavy');
     } else if (share > 0.75 && twaAbs < 150) {
       planScore = Math.round(planScore * 0.7);
-      push('warn', 'plan', 'Main-heavy sail plan', 'Main alone means heavy weather helm and slow tacking. Set a headsail to balance the boat.');
+      push('warn', 'plan', 'plan.mainheavy');
     }
   }
 
   // --- Sail trim ------------------------------------------------------------
   const trimFeedback = (spec, sail, opt, sheet) => {
     if (!sail) return null;
-    const label = spec.label;
-    const key = spec.kind;
+    const sailLabel = sailName(spec.id);
+    const base = { sail: sailLabel, sail_lc: lc(sailLabel), awa: deg0(wind.awaAbs) };
+    const area = spec.kind;
     if (twaAbs < NO_GO_ANGLE) {
-      push('bad', key, `${label} is flogging`, 'No sail can draw inside the no-go zone.');
+      push('bad', area, 'trim.flogging', base);
       return 0;
     }
     if (sail.collapsed) {
       if (spec.kind === 'head' && (spec.id === 'genoa' || spec.id === 'jib')) {
-        push('bad', key, `${label} is collapsing to windward`,
-          `Wing-on-wing only works with the wind well aft (≥ ~150° apparent); it is ${wind.awaAbs.toFixed(0)}°. Gybe the ${label.toLowerCase()} back to leeward.`);
+        push('bad', area, 'trim.wow_collapse', base);
       } else {
-        const t = spec.type;
-        push('bad', key, `${label} is collapsing — ${sail.reason}`,
-          `The ${label.toLowerCase()} flies between ~${t.minAwa}° and ${t.maxAwa}° apparent; you are at ${wind.awaAbs.toFixed(0)}°. ${wind.awaAbs < t.minAwa ? 'Bear away, or change down to a headsail that points.' : 'Head up to bring the apparent wind forward, or switch sails.'}`);
+        const type = spec.type;
+        const forward = wind.awaAbs < type.minAwa;
+        push('bad', area, 'trim.collapse', {
+          ...base, min: type.minAwa, max: type.maxAwa,
+          reason: t(forward ? 'reason.forward' : 'reason.aft'),
+          advice: t(forward ? 'advice.bearaway' : 'advice.headup'),
+        });
       }
       return 0;
     }
@@ -651,32 +654,30 @@ export function evaluate(input) {
     const score = scoreFromRatio(eff);
     const delta = sheet - opt.sheet; // positive = eased (or pole squared) more than optimal
     const downwind = wind.awaAbs > 135;
+    const trimParams = { ...base, sheet, opt: opt.sheet, delta: Math.abs(delta), alpha: deg0(sail.alpha), regime: t(`regime.${sail.regime}`) };
     if (spec.control === 'pole') {
-      if (eff >= 0.9) push('good', key, 'Pole well set', `Pole at ${sheet}°, square to the apparent wind (best ~${opt.sheet}°). The kite is drawing.`);
-      else if (delta > 0) push(eff >= 0.6 ? 'warn' : 'bad', key, 'Pole too far aft', `Ease the pole forward ~${delta}° (to ~${opt.sheet}°) so it sits perpendicular to the apparent wind.`);
-      else push(eff >= 0.6 ? 'warn' : 'bad', key, 'Pole too far forward', `Square the pole back ~${-delta}° (to ~${opt.sheet}°) so the kite faces the wind.`);
+      if (eff >= 0.9) push('good', area, 'pole.good', trimParams);
+      else if (delta > 0) push(eff >= 0.6 ? 'warn' : 'bad', area, 'pole.aft', trimParams);
+      else push(eff >= 0.6 ? 'warn' : 'bad', area, 'pole.forward', trimParams);
       return score;
     }
     if (spec.kind === 'head' && !sail.windward && sail.blanketed && sail.factor < 0.55) {
-      push(eff >= 0.6 ? 'warn' : 'bad', key, `${label} blanketed by the main`,
-        `It is collapsing in the main’s wind shadow (${wind.awaAbs.toFixed(0)}° apparent). ${spec.canWindward ? 'Pole it out to windward (wing-on-wing) or head up to ~150° true.' : 'Head up to ~150° true so it draws clear air.'}`);
+      push(eff >= 0.6 ? 'warn' : 'bad', area, 'trim.blanketed', { ...trimParams, fix: t(spec.canWindward ? 'fix.wow' : 'fix.headup') });
       return score;
     }
     if (sail.alpha <= 2 && !downwind) {
-      push('bad', key, `${label} is luffing`, `Sheeted out beyond the wind — it is flogging. Sheet in about ${Math.abs(delta)}° (to ~${opt.sheet}°).`);
+      push('bad', area, 'trim.luffing', trimParams);
     } else if (eff >= 0.9) {
-      const note = sail.blanketed ? ' It is partly blanketed by the main, though.' : '';
-      const kiteNote = isKite(spec.id) ? ' Luff just on the curl.' : '';
-      push('good', key, `${label} well trimmed`, `Angle of attack ${sail.alpha.toFixed(0)}° — ${sail.regime} flow.${kiteNote} Best sheet is ${opt.sheet}°; you are within ${Math.abs(delta)}°.${note}`);
+      push('good', area, 'trim.good', { ...trimParams, kite: isKite(spec.id) ? t('note.kite') : '', note: sail.blanketed ? t('note.blanketed') : '' });
     } else if (delta > 0) {
-      push(eff >= 0.6 ? 'warn' : 'bad', key, `${label} under-trimmed`, `${isKite(spec.id) ? 'Luff is curling and folding.' : 'Luff is soft / bubbling.'} Sheet in ~${delta}° (to ~${opt.sheet}°).`);
+      push(eff >= 0.6 ? 'warn' : 'bad', area, 'trim.under', { ...trimParams, luff: t(isKite(spec.id) ? 'luff.kite' : 'luff.soft') });
     } else {
-      const heelNote = wind.awaAbs < 100 ? ' Over-sheeting adds heel and kills speed.' : ' Downwind, ease it until the luff just breaks.';
-      push(eff >= 0.6 ? 'warn' : 'bad', key, `${label} over-sheeted${sail.regime.startsWith('stall') ? ' — stalled' : ''}`,
-        `Angle of attack ${sail.alpha.toFixed(0)}°. Ease ~${-delta}° (to ~${opt.sheet}°).${heelNote}`);
+      const stalled = sail.regime.startsWith('stall');
+      push(eff >= 0.6 ? 'warn' : 'bad', area, stalled ? 'trim.over_stalled' : 'trim.over',
+        { ...trimParams, heel: t(wind.awaAbs < 100 ? 'heelnote.upwind' : 'heelnote.downwind') }, 'trim.over.detail');
     }
     if (spec.kind === 'head' && spec.canWindward && sail.blanketed && !sail.windward && eff >= 0.6) {
-      push('info', key, `${label} blanketed by the main`, 'Pole it out to windward (wing-on-wing) or head up to ~150° true so it draws clear air.');
+      push('info', area, 'trim.blanket_info', base, 'trim.blanket_info.detail', 'trim.blanketed.title');
     }
     return score;
   };
@@ -684,7 +685,7 @@ export function evaluate(input) {
   const mainScore = trimFeedback(mSpec, main, mainOpt, mainSheet);
   const headScore = trimFeedback(hSpec, head, headOpt, headSheet);
   if (headArea > 0 && hSpec.canWindward && headOpt && headOpt.windward && !headWindward && twaAbs >= NO_GO_ANGLE) {
-    push('info', 'head', 'Try wing-on-wing', `With the wind ${wind.awaAbs.toFixed(0)}° apparent the ${hSpec.label.toLowerCase()} draws best set to windward (sheeted ~${headOpt.sheet}°).`);
+    push('info', 'head', 'trim.trywow', { sail: sailName(hSpec.id), sail_lc: lc(sailName(hSpec.id)), awa: deg0(wind.awaAbs), opt: headOpt.sheet });
   }
 
   // --- Score ----------------------------------------------------------------

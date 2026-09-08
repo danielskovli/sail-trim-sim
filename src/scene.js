@@ -1,6 +1,7 @@
 // Top-down SVG scene: compass ring, no-go wedge, true/apparent wind arrows and the boat.
 // Also owns direct manipulation: drag the wind arrow, the bow/hull and the sail clews.
 import { rad, deg, norm180, norm360, clamp, mainState, headsail, headState, BOAT } from './model.js';
+import { t, nfKn, mainLabel, mainShort, sailName, headStateLabel, headStateShort } from './i18n.js';
 import { windCss } from './palette.js';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -78,7 +79,7 @@ export function createScene(svg, handlers = {}) {
   }
   for (const [b, label] of [[0, 'N'], [90, 'E'], [180, 'S'], [270, 'W']]) {
     const d = dir(b);
-    text({ x: d.x * (R_RING + 34), y: d.y * (R_RING + 34), class: 'cardinal', 'text-anchor': 'middle', dy: '0.35em' }, label, gCompass);
+    text({ x: d.x * (R_RING + 34), y: d.y * (R_RING + 34), class: 'cardinal', 'text-anchor': 'middle', dy: '0.35em' }, t(`cardinal.${label}`), gCompass);
   }
 
   // --- No-go zone (rotates with the true wind) --------------------------------
@@ -95,7 +96,7 @@ export function createScene(svg, handlers = {}) {
     el('line', { x1: d.x * 60, y1: d.y * 60, x2: d.x * rw, y2: d.y * rw, class: 'layline' }, gNoGo);
     text({ x: d.x * (rw - 30), y: d.y * (rw - 30), class: 'layline-label', 'text-anchor': 'middle' }, '45°', gNoGo);
   }
-  text({ x: 0, y: -R_RING + 64, class: 'nogo-label', 'text-anchor': 'middle' }, 'NO-GO ZONE', gNoGo);
+  text({ x: 0, y: -R_RING + 64, class: 'nogo-label', 'text-anchor': 'middle' }, t('scene.nogo'), gNoGo);
 
   // --- True wind arrow -----------------------------------------------------------
   const gTrue = el('g', {}, svg);
@@ -131,7 +132,7 @@ export function createScene(svg, handlers = {}) {
   const snapLabels = { main: {}, head: {} };
   for (const [id, r] of Object.entries(MAIN_DRAG_R)) {
     el('circle', { cx: mastPt.x, cy: mastPt.y, r, class: 'snap-ring' }, gSnapMain);
-    snapLabels.main[id] = text({ class: 'snap-label', 'text-anchor': 'middle', dy: '0.35em' }, mainState(id).label, gSnapMain);
+    snapLabels.main[id] = text({ class: 'snap-label', 'text-anchor': 'middle', dy: '0.35em' }, mainLabel(id), gSnapMain);
   }
   let snapHeadType = null;
   function buildHeadSnap(typeId) {
@@ -143,7 +144,7 @@ export function createScene(svg, handlers = {}) {
     const origin = g.tack;
     for (const [id, r] of Object.entries(g.dragR)) {
       el('circle', { cx: origin.x, cy: origin.y, r, class: 'snap-ring' }, gSnapHead);
-      snapLabels.head[id] = text({ class: 'snap-label', 'text-anchor': 'middle', dy: '0.35em' }, headState(typeId, id).label, gSnapHead);
+      snapLabels.head[id] = text({ class: 'snap-label', 'text-anchor': 'middle', dy: '0.35em' }, headStateLabel(typeId, id), gSnapHead);
     }
   }
 
@@ -258,9 +259,9 @@ export function createScene(svg, handlers = {}) {
    * @param {object} r evaluate() result
    * @param {object} state current state (normalised)
    * @param {{ghost:boolean}} opts
-   * @param {number} t elapsed ms
+   * @param {number} now elapsed ms (drives luffing flutter)
    */
-  function update(r, stateIn, opts, t) {
+  function update(r, stateIn, opts, now) {
     const state = r.state ?? stateIn;
     lastR = r;
     lastState = state;
@@ -278,7 +279,7 @@ export function createScene(svg, handlers = {}) {
       const ly = p.y + perp.y * 58;
       twLabel.setAttribute('x', lx);
       twLabel.setAttribute('y', ly);
-      twLabel.textContent = `TRUE ${tws.toFixed(tws < 10 ? 1 : 0)} kn · ${fmt3(twd)}°`;
+      twLabel.textContent = t('scene.true', { tws: nfKn(tws), twd: fmt3(twd) });
       const bw = 150;
       twLabelBg.setAttribute('x', lx - bw / 2); twLabelBg.setAttribute('y', ly - 13);
       twLabelBg.setAttribute('width', bw); twLabelBg.setAttribute('height', 26);
@@ -291,7 +292,7 @@ export function createScene(svg, handlers = {}) {
     const mainArea = mainState(state.main.reef).area;
     const mainChord = mainArea > 0 ? MAIN_FOOT_FULL * Math.sqrt(mainArea / 45) : 0;
     const mainBearing = 180 + sideSign * (r.sails.main ? r.sails.main.sheet : state.main.sheet);
-    const mainClew = drawSail(mainSail, boom, mastPt, mainBearing, mainChord, camberFor(r.sails.main, r.awaAbs, t), sideSign);
+    const mainClew = drawSail(mainSail, boom, mastPt, mainBearing, mainChord, camberFor(r.sails.main, r.awaAbs, now), sideSign);
     mainSail.dataset.state = sailState(r.sails.main, r.awaAbs);
     drawGhost(mainGhost, mastPt, 180 + sideSign * (r.sails.main ? r.sails.main.optSheet : 0), mainChord,
       opts.ghost && r.sails.main && Math.abs(r.sails.main.optSheet - r.sails.main.sheet) >= 3);
@@ -320,7 +321,7 @@ export function createScene(svg, handlers = {}) {
         const tackK = { x: centre.x + poleDir.x * half, y: centre.y + poleDir.y * half };
         const clewK = { x: centre.x - poleDir.x * half, y: centre.y - poleDir.y * half };
         // Belly points along `belly` (away from the pole side); with tack→clew = -poleDir, that is the -1 side.
-        drawSailBetween(headSail, headFoot, tackK, clewK, camberFor(headSailR, r.awaAbs, t) * geom.camber * 0.5, -1);
+        drawSailBetween(headSail, headFoot, tackK, clewK, camberFor(headSailR, r.awaAbs, now) * geom.camber * 0.5, -1);
         setLine(pole, mastPt, poleEnd);
         headClew = poleEnd;
         handleAt = poleEnd;
@@ -338,7 +339,7 @@ export function createScene(svg, handlers = {}) {
       const ww = Boolean(state.head.windward) && type.canWindward;
       const side = ww ? -sideSign : sideSign;
       const bearing = 180 + side * sheet;
-      headClew = drawSail(headSail, headFoot, geom.tack, bearing, chord, camberFor(headSailR, r.awaAbs, t) * geom.camber, side);
+      headClew = drawSail(headSail, headFoot, geom.tack, bearing, chord, camberFor(headSailR, r.awaAbs, now) * geom.camber, side);
       if (headSailR) {
         const optSide = headSailR.optWindward ? -sideSign : sideSign;
         drawGhost(headGhost, geom.tack, 180 + optSide * headSailR.optSheet, chord,
@@ -376,14 +377,15 @@ export function createScene(svg, handlers = {}) {
     awLabel.setAttribute('x', 0);
     awLabel.setAttribute('y', -212);
     awLabel.setAttribute('transform', `rotate(${-(awa + hdg)} 0 -212)`);
-    awLabel.textContent = `APP ${aws.toFixed(aws < 10 ? 1 : 0)} kn · ${Math.abs(awa).toFixed(0)}° ${awa >= 0 ? 'stbd' : 'port'}`;
-    if (r.twaAbs < 30) awLabel.textContent = `APP ${aws.toFixed(0)} kn · in irons`;
+    awLabel.textContent = r.twaAbs < 30
+      ? t('scene.app_irons', { aws: nfKn(aws) })
+      : t('scene.app', { aws: nfKn(aws), awa: Math.abs(awa).toFixed(0), side: t(awa >= 0 ? 'tack.starboard.short' : 'tack.port.short') });
 
     // Labels
     hdgLabel.setAttribute('x', 0);
     hdgLabel.setAttribute('y', bowY - 26);
     hdgLabel.setAttribute('transform', `rotate(${-hdg} 0 ${bowY - 26})`);
-    hdgLabel.textContent = `HDG ${fmt3(hdg)}°`;
+    hdgLabel.textContent = t('scene.hdg', { hdg: fmt3(hdg) });
 
     const placeBadge = (badge, at, from, label) => {
       let x;
@@ -403,10 +405,10 @@ export function createScene(svg, handlers = {}) {
       badge.setAttribute('transform', `rotate(${-hdg} ${x} ${y})`);
       badge.textContent = label;
     };
-    placeBadge(mainBadge, mainClew, mastPt, `Main ${mainState(state.main.reef).short}`);
+    placeBadge(mainBadge, mainClew, mastPt, `${sailName('main')} ${mainShort(state.main.reef)}`);
     const headLabel = type.states.length > 2
-      ? `${type.short} ${hs.short}`
-      : hs.area > 0 ? type.short : `${type.short} ${hs.short.toLowerCase()}`;
+      ? `${sailName(type.id)} ${headStateShort(type.id, hs.id)}`
+      : hs.area > 0 ? sailName(type.id) : `${sailName(type.id)} ${headStateShort(type.id, hs.id).toLowerCase()}`;
     placeBadge(headBadge, headClew, geom.tack, `${headLabel}${state.head.windward && type.canWindward && hs.area > 0 ? ' ↔' : ''}`);
 
     if (drag) positionSnapLabels(drag.kind, sideSign, hdg);
@@ -520,13 +522,13 @@ export function createScene(svg, handlers = {}) {
       case 'wind': {
         const twd = Math.round(bearingOf(p.x, p.y)) % 360;
         handlers.onWindDirection?.(twd);
-        showReadout(p, `Wind from ${fmt3(twd)}°`);
+        showReadout(p, t('drag.wind', { d: fmt3(twd) }));
         break;
       }
       case 'heading': {
         const hdg = Math.round(norm360(bearingOf(p.x, p.y) + drag.offset)) % 360;
         handlers.onHeading?.(hdg);
-        showReadout(p, `Heading ${fmt3(hdg)}°`);
+        showReadout(p, t('drag.heading', { d: fmt3(hdg) }));
         break;
       }
       case 'main': {
@@ -540,7 +542,7 @@ export function createScene(svg, handlers = {}) {
         drag.radial ||= Math.abs(d - drag.startD) >= RADIAL_INTENT; // latch: once you pull, you stay in reefing mode
         const reef = drag.radial ? snapStage(MAIN_DRAG_R, s.main.reef, d) : s.main.reef;
         handlers.onMain?.({ sheet, reef });
-        showReadout(p, reef === 'down' ? 'Main down' : `Main ${sheet}° · ${mainState(reef).label}`);
+        showReadout(p, reef === 'down' ? t('drag.main_down') : t('drag.main', { s: sheet, reef: mainLabel(reef) }));
         break;
       }
       case 'head': {
@@ -559,7 +561,7 @@ export function createScene(svg, handlers = {}) {
           const pointerSide = dx < 0 ? 1 : -1;
           const sheet = pointerSide === -sideSign ? clamp(Math.round(off), type.sheetMin, type.sheetMax) : 0;
           handlers.onHead?.({ sheet, size, windward: false });
-          showReadout(p, st.area === 0 ? `${type.short} doused` : `Pole ${sheet}°`);
+          showReadout(p, st.area === 0 ? t('drag.doused', { sail: sailName(type.id) }) : t('drag.pole', { p: sheet }));
         } else {
           const raw = Math.abs(norm180(bearingOf(dx, dy) - 180));
           const pointerSide = dx < 0 ? 1 : -1;
@@ -567,8 +569,10 @@ export function createScene(svg, handlers = {}) {
           if (type.canWindward && raw >= type.sheetMin && Math.abs(dx) > 6) windward = pointerSide !== sideSign;
           const sheet = clamp(Math.round(raw), type.sheetMin, type.sheetMax);
           handlers.onHead?.({ sheet, size, windward });
-          const stateText = type.states.length > 2 ? ` · ${st.short}` : '';
-          showReadout(p, st.area === 0 ? `${type.short} ${st.short.toLowerCase()}` : `${type.short} ${sheet}°${stateText}${windward ? ' · windward' : ''}`);
+          const stateText = type.states.length > 2 ? ` · ${headStateShort(type.id, st.id)}` : '';
+          showReadout(p, st.area === 0
+            ? `${sailName(type.id)} ${headStateShort(type.id, st.id).toLowerCase()}`
+            : `${sailName(type.id)} ${sheet}°${stateText}${windward ? t('drag.windward') : ''}`);
         }
         break;
       }

@@ -22,6 +22,9 @@ No framework, no build step, no dependencies: static HTML, CSS and ES modules, d
 - **Points of sail**: the no-go zone, pinching, blanketing on a run, the accidental-gybe risk dead downwind.
 - **Quiz mode** hides the coaching until you press *Check my trim*, so you can practise honestly, and
   **New scenario** deals a random wind and heading.
+- **English or Norwegian (bokmål)**: the EN / NO switch in the header changes every label and all
+  coaching text, including proper sailing terminology (bidevind, slør, sommerfugl, skjøte). The choice is
+  remembered; `?lang=nb` in a URL forces it.
 
 ## Using it
 
@@ -86,7 +89,8 @@ Numbers are calibrated to be plausible for a typical 8–9 t production cruiser 
 ```
 index.html            page skeleton
 styles.css            windy.com-inspired dark theme, responsive grid (desktop / mid-size / phone)
-src/model.js          pure sailing model: polars, aero, headsail inventory, planner, scoring, coaching text
+src/model.js          pure sailing model: polars, aero, headsail inventory, planner, scoring, coaching keys
+src/i18n.js           English and Norwegian strings, t(), number formatting, language detection
 src/scene.js          SVG top-down scene: compass, no-go wedge, wind arrows, boat, sails, drag handles
 src/particles.js      animated wind particle canvas
 src/palette.js        wind-speed colour scale + legend gradient

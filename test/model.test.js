@@ -3,13 +3,15 @@ import assert from 'node:assert/strict';
 import {
   apparentWind, polarSpeed, recommendedStage, recommend, optimalTrim, evaluate, applyRecommended,
   randomScenario, defaultState, normaliseState, mainSpec, headSpec, SAIL_PLANS, HEADSAILS, sailCoefficients,
-  norm180, NO_GO_ANGLE, AERO,
+  norm180, NO_GO_ANGLE, AERO, planName,
 } from '../src/model.js';
+import { STRINGS, setLanguage, t, tIn, detectLanguage, nf } from '../src/i18n.js';
 
 const near = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg ?? ''} expected ${a} ≈ ${b} (±${tol})`);
 const withHead = (state, head) => ({ ...state, head: { ...state.head, ...head } });
 const NO_KITES = { jib: true, storm: true, code0: false, asym: false, sym: false };
 const GENOA_ONLY = { jib: false, storm: false, code0: false, asym: false, sym: false };
+const keys = (r) => r.feedback.map((f) => f.key);
 
 test('apparent wind: beam reach adds boat speed forward', () => {
   const w = apparentWind(10, 90, 5);
@@ -78,7 +80,7 @@ test('evaluate: the recommended setup scores near-perfect everywhere, with and w
       for (const twa of [42, 60, 90, 120, 150, 178]) {
         const state = applyRecommended({ ...defaultState(), inventory, tws, twd: 0, hdg: -twa });
         const r = evaluate(state);
-        assert.ok(r.score.total >= 85, `${tws} kn / ${twa}° [${state.head.type}] scored ${r.score.total}: ${JSON.stringify(r.score)} ${r.feedback.map((f) => f.title).join(' | ')}`);
+        assert.ok(r.score.total >= 85, `${tws} kn / ${twa}° [${state.head.type}] scored ${r.score.total}: ${JSON.stringify(r.score)} ${keys(r).join(' | ')}`);
         assert.ok(r.speed >= 0.95 * r.polarSpeed - 1e-6, `${tws} kn / ${twa}° speed ${r.speed} vs polar ${r.polarSpeed}`);
       }
     }
@@ -90,7 +92,7 @@ test('evaluate: full sail in a gale upwind is flagged as overpowered', () => {
   assert.ok(r.score.plan < 30, `plan ${r.score.plan}`);
   assert.ok(r.score.total <= 40, `total ${r.score.total}`);
   assert.ok(r.heel > 30, `heel ${r.heel}`);
-  assert.ok(r.feedback.some((f) => f.severity === 'bad' && f.area === 'plan'));
+  assert.ok(keys(r).includes('plan.overpowered'), keys(r).join());
 });
 
 test('evaluate: luffing main is detected and costs speed', () => {
@@ -98,14 +100,18 @@ test('evaluate: luffing main is detected and costs speed', () => {
   const bad = evaluate({ ...defaultState(), main: { reef: 'full', sheet: 70 } });
   assert.equal(bad.score.main, 0);
   assert.ok(bad.speed < good.speed - 0.5);
-  assert.ok(bad.feedback.some((f) => f.title.includes('luffing')));
+  assert.ok(keys(bad).includes('trim.luffing'));
+  const item = bad.feedback.find((f) => f.key === 'trim.luffing');
+  assert.equal(item.title, 'Main is luffing');
+  assert.match(item.detail, /Sheet in about \d+°/);
 });
 
 test('evaluate: in irons zeroes the score', () => {
   const r = evaluate({ ...defaultState(), twd: 10, hdg: 5 });
-  assert.equal(r.pointOfSail, 'In irons');
+  assert.equal(r.pointOfSail, 'irons');
   assert.ok(r.score.total <= 15);
   assert.equal(r.speed, 0);
+  assert.ok(keys(r).includes('course.irons'));
 });
 
 test('evaluate: leeward genoa on a dead run is blanketed, wing-on-wing fixes it', () => {
@@ -113,7 +119,7 @@ test('evaluate: leeward genoa on a dead run is blanketed, wing-on-wing fixes it'
   const lee = evaluate(withHead(base, { type: 'genoa', size: 'g135', sheet: 90, windward: false }));
   const wow = evaluate(withHead(base, { type: 'genoa', size: 'g135', sheet: 90, windward: true }));
   assert.ok(lee.score.head < 40, `leeward genoa ${lee.score.head}`);
-  assert.ok(lee.feedback.some((f) => f.title.toLowerCase().includes('blanketed')));
+  assert.ok(keys(lee).includes('trim.blanketed'));
   assert.ok(wow.score.head >= 95, `wing-on-wing ${wow.score.head}`);
   assert.ok(wow.speed > lee.speed);
 });
@@ -121,18 +127,20 @@ test('evaluate: leeward genoa on a dead run is blanketed, wing-on-wing fixes it'
 test('evaluate: wing-on-wing on a beam reach collapses', () => {
   const r = evaluate(withHead({ ...defaultState(), tws: 12, twd: 0, hdg: 270 }, { type: 'genoa', size: 'g135', sheet: 40, windward: true }));
   assert.equal(r.score.head, 0);
-  assert.ok(r.feedback.some((f) => f.title.includes('collapsing')));
+  assert.ok(keys(r).includes('trim.wow_collapse'));
 });
 
 test('evaluate: spinnaker envelope and wind limit', () => {
   const upwind = evaluate(withHead({ ...defaultState(), tws: 10, twd: 0, hdg: -45 }, { type: 'asym', size: 'set', sheet: 30, windward: false }));
   assert.equal(upwind.score.head, 0, 'asym cannot go upwind');
-  assert.ok(upwind.feedback.some((f) => f.title.includes('collapsing') && f.title.includes('forward')));
+  const collapse = upwind.feedback.find((f) => f.key === 'trim.collapse');
+  assert.ok(collapse, keys(upwind).join());
+  assert.equal(collapse.params.reason, t('reason.forward'));
 
   const gale = evaluate(withHead({ ...defaultState(), tws: 26, twd: 0, hdg: 140 }, { type: 'asym', size: 'set', sheet: 80, windward: false }));
   assert.ok(gale.score.plan <= 10, `plan ${gale.score.plan}`);
   assert.ok(gale.score.total <= 40, `total ${gale.score.total}`);
-  assert.ok(gale.feedback.some((f) => f.title.startsWith('Too much wind')));
+  assert.ok(keys(gale).includes('plan.overlimit'));
 
   const good = evaluate(applyRecommended({ ...defaultState(), tws: 12, twd: 0, hdg: 140 }));
   assert.equal(good.state.head.type, 'asym');
@@ -146,21 +154,21 @@ test('evaluate: symmetric spinnaker pole feedback', () => {
   assert.ok(best.score.head >= 95, `sym optimum ${best.score.head}`);
   const forward = evaluate(withHead(base, { type: 'sym', size: 'set', sheet: 15, windward: false }));
   assert.ok(forward.score.head < 60, `pole too far forward scores ${forward.score.head}`);
-  assert.ok(forward.feedback.some((f) => f.title.includes('Pole too far forward')));
+  assert.ok(keys(forward).includes('pole.forward'));
 });
 
 test('evaluate: a white-sail boat is told when the kite would pay', () => {
   const r = evaluate(withHead({ ...defaultState(), tws: 12, twd: 0, hdg: 140, main: { reef: 'full', sheet: 70 } }, { type: 'genoa', size: 'g135', sheet: 60, windward: false }));
   assert.equal(r.recommended.head.type, 'asym');
-  assert.ok(r.feedback.some((f) => f.area === 'plan' && f.title.toLowerCase().includes('asym')), r.feedback.map((f) => f.title).join(' | '));
+  assert.ok(keys(r).includes('plan.kite'), keys(r).join(' | '));
   assert.ok(r.score.plan < 100);
 });
 
 test('evaluate: under-canvassed and unbalanced plans are called out', () => {
   const r = evaluate(withHead({ ...defaultState(), tws: 10, main: { reef: 'r3', sheet: 8 } }, { type: 'genoa', size: 'furled', sheet: 10, windward: false }));
   assert.ok(r.score.plan < 30);
-  assert.ok(r.feedback.some((f) => f.title.includes('Under-canvassed')));
-  assert.ok(r.feedback.some((f) => f.title.includes('Main-heavy')));
+  assert.ok(keys(r).includes('plan.under'));
+  assert.ok(keys(r).includes('plan.mainheavy'));
   assert.equal(r.score.head, null, 'no headsail score when furled');
 });
 
@@ -184,4 +192,55 @@ test('random scenarios never start inside the no-go zone', () => {
     assert.ok(s.tws >= 2 && s.tws <= 42);
     assert.ok(twa > NO_GO_ANGLE);
   }
+});
+
+// ---------------------------------------------------------------------------------------------
+// Translations
+// ---------------------------------------------------------------------------------------------
+
+test('i18n: every English key has a Norwegian translation and vice versa; placeholders match', () => {
+  const enKeys = Object.keys(STRINGS.en);
+  const nbKeys = Object.keys(STRINGS.nb);
+  const missingNb = enKeys.filter((k) => !(k in STRINGS.nb));
+  const extraNb = nbKeys.filter((k) => !(k in STRINGS.en));
+  assert.deepEqual(missingNb, [], `missing in nb: ${missingNb.join(', ')}`);
+  assert.deepEqual(extraNb, [], `not in en: ${extraNb.join(', ')}`);
+  const placeholders = (s) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
+  for (const k of enKeys) {
+    const a = placeholders(STRINGS.en[k]);
+    const b = placeholders(STRINGS.nb[k]);
+    // nb may use sail_lc where en uses sail (article/casing differences), otherwise sets must match.
+    const norm = (arr) => arr.map((p) => (p === 'sail_lc' ? 'sail' : p));
+    assert.deepEqual(norm(b), norm(a), `placeholders differ for ${k}: en ${a} vs nb ${b}`);
+  }
+});
+
+test('i18n: evaluate speaks Norwegian when asked, and English again afterwards', () => {
+  try {
+    setLanguage('nb');
+    const r = evaluate({ ...defaultState(), main: { reef: 'full', sheet: 70 } });
+    const item = r.feedback.find((f) => f.key === 'trim.luffing');
+    assert.equal(item.title, 'Storseil lever');
+    assert.match(item.detail, /Skjøt inn ca\. \d+°/);
+    assert.equal(planName({ main: 'r1', head: { type: 'asym', size: 'set' } }), 'Storseil med rev 1 + asymmetrisk spinnaker');
+    assert.equal(planName({ main: 'full', head: { type: 'genoa', size: 'g100' } }), 'Fullt storseil + genoa på 100 %');
+    assert.equal(nf(7.6, 1), '7,6');
+    assert.equal(r.beaufort.label, 'Laber bris');
+  } finally {
+    setLanguage('en');
+  }
+  assert.equal(planName({ main: 'r1', head: { type: 'asym', size: 'set' } }), 'Main at reef 1 + asymmetric spinnaker');
+  assert.equal(planName({ main: 'down', head: { type: 'genoa', size: 'furled' } }), 'Bare poles');
+  assert.equal(nf(7.6, 1), '7.6');
+  assert.equal(tIn('nb', 'pos.deadrun'), 'Plattlens');
+  assert.equal(t('nonexistent.key'), 'nonexistent.key');
+});
+
+test('i18n: language detection order is URL, saved choice, browser', () => {
+  assert.equal(detectLanguage('?lang=nb', 'en', 'en-GB'), 'nb');
+  assert.equal(detectLanguage('', 'nb', 'en-GB'), 'nb');
+  assert.equal(detectLanguage('', null, 'nb-NO'), 'nb');
+  assert.equal(detectLanguage('', null, 'nn-NO'), 'nb');
+  assert.equal(detectLanguage('', null, 'de-DE'), 'en');
+  assert.equal(detectLanguage('?lang=xx', null, ''), 'en');
 });
