@@ -96,29 +96,7 @@ src/palette.js        wind-speed colour scale + legend gradient
 src/main.js           DOM wiring, controls, coach panel, quiz mode, URL scenarios, persistence
 test/model.test.js    node --test suite for the model
 test/e2e/drag.mjs     DevTools-protocol drag checks in headless Chrome
+scripts/build.mjs     allowlist copy of the deployable files into dist/ for the deploy workflow
 serve.mjs             zero-dependency static server
-staticwebapp.config.json, .github/workflows/   Azure Static Web Apps deploy on push to main
+staticwebapp.config.json, .github/workflows/   Azure Static Web Apps deploy on push to main (docs-only pushes skipped)
 ```
-
-## Deploying
-
-The site is plain static files. The included GitHub Actions workflow deploys the repository root to
-**Azure Static Web Apps** on every push to `main` (and builds preview environments for pull requests),
-after running the unit tests.
-
-The production app is the Free-tier Static Web App `Sail-Trim-Sim` in resource group `Sail-Trim-Sim_group`
-(West Europe), deployment source "Other", so the only wiring is the deployment token stored as the
-repository secret `AZURE_STATIC_WEB_APPS_API_TOKEN`. To point the pipeline at a different Static Web App:
-
-```sh
-az staticwebapp create --name <name> --resource-group <rg> --location westeurope --sku Free
-az staticwebapp secrets list --name <name> --resource-group <rg> --query properties.apiKey -o tsv \
-  | gh secret set AZURE_STATIC_WEB_APPS_API_TOKEN --repo danielskovli/sail-trim-sim
-```
-
-Then push to `main` (or rerun the last workflow run). The deploy job is skipped automatically while the
-secret is missing, so the tests still run on forks.
-
-## Licence
-
-[MIT](LICENSE) © 2026 Daniel Skovli

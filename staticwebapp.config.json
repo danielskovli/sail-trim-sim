@@ -1,13 +1,8 @@
 {
   "navigationFallback": {
     "rewrite": "/index.html",
-    "exclude": ["/*.{html,css,js,mjs,json,svg,png,jpg,jpeg,gif,webp,ico,woff,woff2}", "/src/*", "/docs/*"]
+    "exclude": ["/*.{html,css,js,mjs,json,svg,png,jpg,jpeg,gif,webp,ico,woff,woff2}", "/src/*"]
   },
-  "routes": [
-    { "route": "/test/*", "statusCode": 404 },
-    { "route": "/serve.mjs", "statusCode": 404 },
-    { "route": "/package.json", "statusCode": 404 }
-  ],
   "mimeTypes": {
     ".html": "text/html; charset=utf-8",
     ".js": "text/javascript; charset=utf-8",

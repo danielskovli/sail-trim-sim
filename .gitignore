@@ -13,3 +13,6 @@ test/e2e/chrome-profile/
 
 # Azure Static Web Apps CLI
 .azure/
+
+# Deploy staging folder produced by `npm run build`
+dist/

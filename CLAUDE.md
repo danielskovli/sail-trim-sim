@@ -6,7 +6,7 @@ Guidance for AI agents working in this repository.
 
 Sail Trim Trainer: a dependency-free static web app (vanilla ES modules, SVG + canvas) for practising
 sail plan and trim on a 40 ft sloop. A pure-JS sailing model scores the user's setup and produces
-coaching text. No framework, no bundler, no build step.
+coaching text. No framework, no bundler, no build step (`npm run build` is only a file copy for deployment).
 
 ## Commands
 
@@ -14,6 +14,7 @@ coaching text. No framework, no bundler, no build step.
 npm start          # node serve.mjs → http://localhost:5173
 npm test           # unit tests for the model (node --test)
 npm run test:e2e   # real pointer drags in headless Chrome over CDP (needs Chrome installed)
+npm run build      # copy the deployable files into dist/ (what the deploy workflow uploads)
 ```
 
 The page uses ES modules, so it must be served over HTTP; `file://` will not work.
@@ -30,7 +31,11 @@ The page uses ES modules, so it must be served over HTTP; `file://` will not wor
 - `src/palette.js` — wind-speed colour scale.
 - `src/main.js` — DOM wiring: controls, coach panel, quiz mode, URL parameters, localStorage.
 - `test/model.test.js` — model tests. `test/e2e/drag.mjs` — CDP-driven drag checks.
-- `staticwebapp.config.json`, `.github/workflows/` — Azure Static Web Apps deploy on push to `main`.
+- `scripts/build.mjs` — allowlist copy of the deployable files into `dist/`. Only `index.html`, `styles.css`,
+  `src/` and `staticwebapp.config.json` are deployed; anything new that the page loads must be added there.
+- `staticwebapp.config.json`, `.github/workflows/` — Azure Static Web Apps deploy on push to `main`. The
+  workflow uploads `dist/`, not the repository root, and skips pushes that only touch Markdown, `docs/`,
+  `LICENSE` or editor config.
 
 ## Conventions
 

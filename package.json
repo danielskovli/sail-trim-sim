@@ -13,6 +13,7 @@
   },
   "scripts": {
     "start": "node serve.mjs 5173",
+    "build": "node scripts/build.mjs",
     "test": "node --test test/*.test.js",
     "test:e2e": "node test/e2e/drag.mjs"
   },
