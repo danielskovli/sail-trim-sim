@@ -34,5 +34,5 @@ createServer(async (req, res) => {
     res.end(err.code === 'ENOENT' ? 'Not found' : 'Error');
   }
 }).listen(port, () => {
-  console.log(`Sail Trim Trainer → http://localhost:${port}`);
+  console.log(`Sail Trim → http://localhost:${port}`);
 });

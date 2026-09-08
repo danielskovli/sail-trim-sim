@@ -1,12 +1,12 @@
-# Sail Trim Trainer ⛵
+# Sail Trim ⛵
 
-Which sails, how much of them, and how tight? Sail Trim Trainer is a top-down simulator for practising
+Which sails, how much of them, and how tight? Sail Trim is a top-down simulator for practising
 **sail plan and trim on a 40 ft cruising sloop**. Set the wind and your heading, pick a headsail, reef, sheet,
 and a coach scores the result and tells you exactly what to change, in the language you'd hear on deck.
 
 **▶ [Try the live web app](https://icy-moss-0834b5403.3.azurestaticapps.net/)**
 
-![Sail Trim Trainer: an asymmetric spinnaker on a broad reach, coach score 100](docs/screenshot.jpg)
+![Sail Trim: an asymmetric spinnaker on a broad reach, coach score 100](docs/screenshot.jpg)
 
 No framework, no build step, no dependencies: static HTML, CSS and ES modules, deployable to any static host.
 

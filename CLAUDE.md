@@ -4,7 +4,7 @@ Guidance for AI agents working in this repository.
 
 ## What this is
 
-Sail Trim Trainer: a dependency-free static web app (vanilla ES modules, SVG + canvas) for practising
+Sail Trim: a dependency-free static web app (vanilla ES modules, SVG + canvas) for practising
 sail plan and trim on a 40 ft sloop. A pure-JS sailing model scores the user's setup and produces
 coaching text. No framework, no bundler, no build step (`npm run build` is only a file copy for deployment).
 

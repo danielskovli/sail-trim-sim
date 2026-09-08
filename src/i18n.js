@@ -7,7 +7,7 @@ export const LANGS = [
 ];
 
 const en = {
-  'app.title': 'Sail Trim Trainer',
+  'app.title': 'Sail Trim',
   'app.subtitle': '40 ft sloop · main, genoa, jib, code 0 & spinnakers',
   'unit.kn': 'kn',
 
@@ -268,7 +268,7 @@ const en = {
 };
 
 const nb = {
-  'app.title': 'Sail Trim Trainer',
+  'app.title': 'Seiltrim',
   'app.subtitle': '40 fots seilbåt · storseil, forseil og spinnakere',
   'unit.kn': 'kn',
 
